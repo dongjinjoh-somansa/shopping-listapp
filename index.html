@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>쇼핑 리스트</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+    }
+
+    h1 {
+      font-size: 28px;
+      color: #1a1a2e;
+      margin-bottom: 24px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .input-row input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #ddd;
+      border-radius: 10px;
+      font-size: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-row input:focus {
+      border-color: #4a6cf7;
+    }
+
+    .input-row button {
+      padding: 12px 20px;
+      background: #4a6cf7;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+
+    .input-row button:hover {
+      background: #3b5de7;
+    }
+
+    .count {
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 12px;
+    }
+
+    ul {
+      list-style: none;
+    }
+
+    li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      transition: opacity 0.2s;
+    }
+
+    li.checked {
+      opacity: 0.5;
+    }
+
+    li .checkbox {
+      width: 22px;
+      height: 22px;
+      border: 2px solid #ccc;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    li.checked .checkbox {
+      background: #4a6cf7;
+      border-color: #4a6cf7;
+    }
+
+    li.checked .checkbox::after {
+      content: '';
+      width: 6px;
+      height: 10px;
+      border: solid #fff;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+      margin-bottom: 2px;
+    }
+
+    li .text {
+      flex: 1;
+      font-size: 16px;
+      color: #333;
+    }
+
+    li.checked .text {
+      text-decoration: line-through;
+      color: #999;
+    }
+
+    li .delete {
+      background: none;
+      border: none;
+      color: #ccc;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+      transition: color 0.2s;
+    }
+
+    li .delete:hover {
+      color: #e74c3c;
+    }
+
+    .empty {
+      text-align: center;
+      color: #aaa;
+      padding: 40px 0;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>쇼핑 리스트</h1>
+    <div class="input-row">
+      <input type="text" id="itemInput" placeholder="추가할 항목을 입력하세요">
+      <button onclick="addItem()">추가</button>
+    </div>
+    <div class="count" id="count"></div>
+    <ul id="list"></ul>
+    <div class="empty" id="empty">목록이 비어 있습니다.</div>
+  </div>
+
+  <script>
+    // Supabase 설정
+    const SUPABASE_URL = 'https://onxbdkphibraolcpcvys.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ueGJka3BoaWJyYW9sY3BjdnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NjQxMjIsImV4cCI6MjA4NzI0MDEyMn0.cMtlkmEFRYf1dfbpmWOVi-QjskvfQ2HYhveI4jIv_LU';
+    const API = `${SUPABASE_URL}/rest/v1/shopping_items`;
+    const headers = {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    };
+
+    let items = [];
+
+    const input = document.getElementById('itemInput');
+    const listEl = document.getElementById('list');
+    const countEl = document.getElementById('count');
+    const emptyEl = document.getElementById('empty');
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') addItem();
+    });
+
+    // Supabase에서 전체 목록 불러오기
+    async function loadItems() {
+      const res = await fetch(`${API}?select=*&order=created_at.asc`, { headers });
+      items = await res.json();
+      render();
+    }
+
+    function render() {
+      listEl.innerHTML = '';
+      items.forEach(item => {
+        const li = document.createElement('li');
+        if (item.checked) li.classList.add('checked');
+        li.innerHTML = `
+          <div class="checkbox" onclick="toggle(${item.id})"></div>
+          <span class="text">${escapeHtml(item.name)}</span>
+          <button class="delete" onclick="remove(${item.id})">&times;</button>
+        `;
+        listEl.appendChild(li);
+      });
+
+      const remaining = items.filter(i => !i.checked).length;
+      countEl.textContent = items.length
+        ? `총 ${items.length}개 중 ${remaining}개 남음`
+        : '';
+      emptyEl.style.display = items.length ? 'none' : 'block';
+    }
+
+    async function addItem() {
+      const name = input.value.trim();
+      if (!name) return;
+      input.value = '';
+      input.focus();
+
+      const res = await fetch(API, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name, checked: false })
+      });
+      const [newItem] = await res.json();
+      items.push(newItem);
+      render();
+    }
+
+    async function toggle(id) {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      item.checked = !item.checked;
+      render();
+
+      await fetch(`${API}?id=eq.${id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ checked: item.checked })
+      });
+    }
+
+    async function remove(id) {
+      items = items.filter(i => i.id !== id);
+      render();
+
+      await fetch(`${API}?id=eq.${id}`, {
+        method: 'DELETE',
+        headers
+      });
+    }
+
+    function escapeHtml(text) {
+      const d = document.createElement('div');
+      d.textContent = text;
+      return d.innerHTML;
+    }
+
+    loadItems();
+    input.focus();
+  </script>
+</body>
+</html>
